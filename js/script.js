@@ -66,6 +66,13 @@
  * - currency functions
  * - utility functions
  * - Elychart templates
+ *
+ * Known issues:
+ * - currencies that convert to high numbers spread out of their columns
+ *
+ * Suggested features:
+ * - Time range selector, instead of buttons
+ * - Full-screen mode
  */
 
 ;(function ($, window, document, undefined)
@@ -101,14 +108,15 @@
 
 				// Type codes, used to save storing space in DB
 				types: {
-					'sale':			1,
-					'withdrawal':	2,
-					'referral_cut':	3,
-					'deposit':		4,
-					'purchase':		5,
-					'refund':		6,		// Not sure of this one
+					'sale':				1,
+					'withdrawal':		2,
+					'referral_cut':		3,
+					'deposit':			4,
+					'purchase':			5,
+					'refund':			6,		// Not sure of this one
+					'sale_reversal':	7,
 
-					'other':		0		// For unknown types
+					'other':			0		// For unknown types
 				}
 
 			},
@@ -994,7 +1002,7 @@
 		lastMonth = getStoredValue( 'last-month', false );
 		lastYear = getStoredValue( 'last-year', false );
 
-		// If never refresh (or reload is true), parse first available statement date
+		// If never refreshed (or reload is true), parse first available statement date
 		if ( lastMonth === false || !lastYear )
 		{
 			// Defaults
@@ -1002,9 +1010,9 @@
 			lastYear = now.getFullYear();
 
 			// Past statements links
-			$( '.sidebar-s .feature-list a[href^="/user/' + username + '/statement?month="]' ).first().each( function ()
+			$( '.sidebar-s .feature-list a[href^="/statement/"]' ).first().each( function ()
 			{
-				params = /month=([0-9]+)&year=([0-9]+)$/.exec( this.href );
+				params = /([0-9]+)-([0-9]+)$/.exec( this.href );
 				if ( params )
 				{
 					lastMonth = parseInt( params[ 1 ], 10 );
@@ -1086,7 +1094,7 @@
 	 */
 	function refreshMonthStatement( month, year, callback )
 	{
-		var url = '/user/' + username + '/download_statement_as_csv?month=' + month + '&year=' + year;
+		var url = '/statement/' + year + '-' + month + '.csv';
 
 		// Log
 		console.log( 'Refreshing ' + month + '/' + year );
@@ -1100,6 +1108,31 @@
 				var headers, columns = {}, i;
 
 				console.log( '* File downloaded' );
+
+				// Detect empty request
+				if ( !data || typeof data !== 'string' )
+				{
+					console.log( '* Empty response from server, abort refresh for ' + month + '/' + year );
+
+					// Callback
+					if ( callback )
+					{
+						callback.call();
+					}
+					return;
+				}
+				// Detect HTML error message
+				else if ( data.substr( 0, 1 ) === '<' )
+				{
+					console.log( '* Invalid response from server (probably updating), abort refresh for ' + month + '/' + year );
+
+					// Callback
+					if ( callback )
+					{
+						callback.call();
+					}
+					return;
+				}
 
 				// Parse
 				data = $.csv()( data );
@@ -5118,7 +5151,7 @@
 	 * @param string thousands_sep
 	 * @return string
 	 */
-	function number_format ( number, decimals, dec_point, thousands_sep )
+	function number_format( number, decimals, dec_point, thousands_sep )
 	{
 		number = (number + '').replace(/[^0-9+\-Ee.]/g, '');
 		var n = !isFinite(+number) ? 0 : +number,
@@ -5150,7 +5183,7 @@
 	 * @param string pad_type
 	 * @return string
 	 */
-	function str_pad ( input, pad_length, pad_string, pad_type )
+	function str_pad( input, pad_length, pad_string, pad_type )
 	{
 		var half = '',
 			pad_to_go;
